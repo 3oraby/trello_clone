@@ -4,6 +4,8 @@ const jwt = require("jsonwebtoken");
 const AppError = require("../utils/appError");
 
 const User = require("../models/userModel");
+const Email = require("../utils/email");
+const crypto = require("crypto");
 
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -62,6 +64,13 @@ exports.protect = catchAsc(async (req, res, next) => {
       )
     );
   }
+
+  if (user.changedPasswordAfter(decoded.iat)) {
+    return next(
+      new AppError("User recently changed password! Please log in again.", 401)
+    );
+  }
+
   req.user = user;
   next();
 });
@@ -96,6 +105,8 @@ exports.signup = catchAsc(async (req, res, next) => {
     role: req.body.role,
   });
 
+  const url = `${req.protocol}://${req.get("host")}/me`;
+  await new Email(newUser, url).sendWelcome();
   createSendToken(newUser, 201, res, "User created successfully");
 });
 
@@ -123,4 +134,78 @@ exports.updatePassword = catchAsc(async (req, res, next) => {
   await user.save();
 
   createSendToken(user, 200, res, "Password updated successfully");
+});
+
+exports.forgetPassword = catchAsc(async (req, res, next) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return next(new AppError("Please provide email", 400));
+  }
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    return next(new AppError("User not found", 404));
+  }
+
+  const resetToken = user.createPasswordResetToken();
+  await user.save({ validateBeforeSave: false });
+
+  const resetURL = `${req.protocol}://${req.get(
+    "host"
+  )}/resetPassword/${resetToken}`;
+
+  console.log(resetURL);
+
+  try {
+    await new Email(user, resetURL).sendForgetPassword();
+
+    res.status(200).json({
+      status: "success",
+      message: "Token sent to email!",
+    });
+  } catch (err) {
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save({ validateBeforeSave: false });
+
+    return next(
+      new AppError(
+        "There was an error sending the email. Try again later!",
+        500
+      )
+    );
+  }
+});
+
+exports.resetPassword = catchAsc(async (req, res, next) => {
+  const { password, passwordConfirm } = req.body;
+  if (!password || !passwordConfirm) {
+    return next(
+      new AppError("Please provide password and passwordConfirm", 400)
+    );
+  }
+
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(req.params.token)
+    .digest("hex");
+
+  const user = await User.findOne({
+    passwordResetToken: hashedToken,
+    passwordResetExpires: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    return next(new AppError("Token is invalid or has expired", 400));
+  }
+
+  user.password = password;
+  user.passwordConfirm = passwordConfirm;
+  user.passwordResetToken = undefined;
+  user.passwordResetExpires = undefined;
+
+  await user.save();
+
+  createSendToken(user, 200, res, "Password reset successfully");
 });

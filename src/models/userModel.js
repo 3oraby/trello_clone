@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const validator = require("validator");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 
 const userSchema = new mongoose.Schema({
   name: {
@@ -44,6 +45,12 @@ const userSchema = new mongoose.Schema({
   photo: {
     type: String,
   },
+  passwordResetToken: String,
+  passwordResetExpires: Date,
+  passwordChangedAt: {
+    type: Date,
+    select: false,
+  },
 });
 
 // hash password before save user
@@ -61,6 +68,14 @@ userSchema.pre(/^find/, function () {
   this.find({ active: true });
 });
 
+// update passwordChangedAt when password is changed
+userSchema.pre("save", function () {
+  if (!this.isModified("password") || this.isNew) return;
+
+  // -1000 to ensure the token is created after the password has been changed
+  this.passwordChangedAt = Date.now() - 1000;
+});
+
 // check password
 userSchema.methods.correctPassword = async function (
   candidatePassword,
@@ -68,6 +83,30 @@ userSchema.methods.correctPassword = async function (
 ) {
   if (!candidatePassword || !userPassword) return false;
   return await bcrypt.compare(candidatePassword, userPassword);
+};
+
+userSchema.methods.createPasswordResetToken = function () {
+  const resetToken = crypto.randomBytes(32).toString("hex");
+
+  this.passwordResetToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+  // 10 minutes
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000;
+  return resetToken;
+};
+
+// check if password is changed after token is created
+userSchema.methods.changedPasswordAfter = function (JWTTimestamp) {
+  if (this.passwordChangedAt) {
+    const changedTimestamp = parseInt(
+      this.passwordChangedAt.getTime() / 1000,
+      10
+    );
+    return JWTTimestamp < changedTimestamp;
+  }
+  return false;
 };
 
 module.exports = mongoose.model("User", userSchema);

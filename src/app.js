@@ -5,6 +5,10 @@ const globalErrorHandler = require("./controllers/errorController");
 
 const userRoutes = require("./routes/userRoutes.js");
 const authRoutes = require("./routes/authRoutes.js");
+const path = require("path");
+
+app.set("view engine", "pug");
+app.set("views", path.join(__dirname, "templates"));
 
 app.use(express.json());
 app.use(express.static(`${__dirname}/public`));
@@ -13,6 +17,10 @@ app.use((req, res, next) => {
   req.requestTime = new Date().toISOString();
   console.log(req.requestTime);
   next();
+});
+
+app.get("/resetPassword/:token", (req, res) => {
+  res.status(200).render("reset_password");
 });
 
 app.use("/api/v1/users", userRoutes);
