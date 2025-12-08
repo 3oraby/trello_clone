@@ -155,8 +155,6 @@ exports.forgetPassword = catchAsc(async (req, res, next) => {
     "host"
   )}/resetPassword/${resetToken}`;
 
-  console.log(resetURL);
-
   try {
     await new Email(user, resetURL).sendForgetPassword();
 
