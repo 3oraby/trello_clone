@@ -37,13 +37,14 @@ module.exports = class Email {
     });
   }
 
-  async send(template, subject) {
+  async send(template, subject, data = {}) {
     try {
       const html = pug.renderFile(`${__dirname}/../templates/${template}.pug`, {
         name: this.firstName,
         resetUrl: this.url,
         expiresIn: 10,
         subject,
+        ...data,
       });
       const text = htmlToText.convert(html);
 
@@ -70,5 +71,32 @@ module.exports = class Email {
       "forget_password",
       "Your password reset token (valid for 10 min)"
     );
+  }
+
+  async sendVerificationOTP(otp) {
+    try {
+      const subject = "Email verification code";
+      const html = pug.renderFile(`${__dirname}/../templates/otp_email.pug`, {
+        name: this.firstName,
+        email: this.to,
+        expiresIn: process.env.OTP_EXPIRES_IN,
+        title: "Email verification code",
+        message: "Please use the code below to verify your email",
+        otp,
+      });
+      const text = htmlToText.convert(html);
+
+      const mailOptions = {
+        from: this.from,
+        to: this.to,
+        subject,
+        text,
+        html,
+      };
+
+      await this.newTransport().sendMail(mailOptions);
+    } catch (error) {
+      console.log(error);
+    }
   }
 };

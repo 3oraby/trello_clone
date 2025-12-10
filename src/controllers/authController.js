@@ -6,15 +6,13 @@ const AppError = require("../utils/appError");
 const User = require("../models/userModel");
 const Email = require("../utils/email");
 const crypto = require("crypto");
-
-const signToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
-  });
-};
+const generateAccessToken = require("../utils/generateToken");
+const generateOTP = require("../utils/generateOtp");
+const HttpStatus = require("../enums/httpStatus");
+const bcrypt = require("bcrypt");
 
 const createSendToken = (user, statusCode, res, message) => {
-  const token = signToken(user._id);
+  const token = generateAccessToken(user._id);
 
   const cookieOptions = {
     expires: new Date(
@@ -47,7 +45,10 @@ exports.protect = catchAsc(async (req, res, next) => {
   }
   if (!token) {
     return next(
-      new AppError("You are not logged in! Please log in to get access.", 401)
+      new AppError(
+        "You are not logged in! Please log in to get access.",
+        HttpStatus.Unauthorized
+      )
     );
   }
 
@@ -60,14 +61,17 @@ exports.protect = catchAsc(async (req, res, next) => {
     return next(
       new AppError(
         "The user belonging to this token does no longer exist.",
-        401
+        HttpStatus.Unauthorized
       )
     );
   }
 
   if (user.changedPasswordAfter(decoded.iat)) {
     return next(
-      new AppError("User recently changed password! Please log in again.", 401)
+      new AppError(
+        "User recently changed password! Please log in again.",
+        HttpStatus.Unauthorized
+      )
     );
   }
 
@@ -85,14 +89,16 @@ exports.login = catchAsc(async (req, res, next) => {
   const user = await User.findOne({ email }).select("+password");
 
   if (!user || !(await user.correctPassword(password, user.password))) {
-    return next(new AppError("Incorrect email or password", 401));
+    return next(
+      new AppError("Incorrect email or password", HttpStatus.Unauthorized)
+    );
   }
 
   if (!user.active) {
-    return next(new AppError("User is not active", 401));
+    return next(new AppError("User is not active", HttpStatus.Unauthorized));
   }
 
-  createSendToken(user, 200, res, "User logged in successfully");
+  createSendToken(user, HttpStatus.OK, res, "User logged in successfully");
 });
 
 exports.signup = catchAsc(async (req, res, next) => {
@@ -105,9 +111,20 @@ exports.signup = catchAsc(async (req, res, next) => {
     role: req.body.role,
   });
 
-  const url = `${req.protocol}://${req.get("host")}/me`;
-  await new Email(newUser, url).sendWelcome();
-  createSendToken(newUser, 201, res, "User created successfully");
+  const otp = generateOTP();
+  const otpHashed = crypto.createHash("sha256").update(otp).digest("hex");
+  newUser.emailOTP = otpHashed;
+  newUser.emailOTPExpires = Date.now() + process.env.OTP_EXPIRES_IN * 60 * 1000;
+
+  await newUser.save({ validateBeforeSave: false });
+
+  new Email(newUser, req).sendVerificationOTP(otp);
+
+  res.status(HttpStatus.Created).json({
+    status: "success",
+    message: "otp sent to email! please go and verify your email",
+    data: newUser,
+  });
 });
 
 exports.updatePassword = catchAsc(async (req, res, next) => {
@@ -124,7 +141,9 @@ exports.updatePassword = catchAsc(async (req, res, next) => {
   const user = await User.findById(req.user.id).select("+password");
 
   if (!user || !(await user.correctPassword(currentPassword, user.password))) {
-    return next(new AppError("current password is not correct", 401));
+    return next(
+      new AppError("current password is not correct", HttpStatus.Unauthorized)
+    );
   }
 
   user.password = newPassword;
@@ -133,19 +152,19 @@ exports.updatePassword = catchAsc(async (req, res, next) => {
   // to validate password and passwordConfirm
   await user.save();
 
-  createSendToken(user, 200, res, "Password updated successfully");
+  createSendToken(user, HttpStatus.OK, res, "Password updated successfully");
 });
 
 exports.forgetPassword = catchAsc(async (req, res, next) => {
   const { email } = req.body;
 
   if (!email) {
-    return next(new AppError("Please provide email", 400));
+    return next(new AppError("Please provide email", HttpStatus.BadRequest));
   }
 
   const user = await User.findOne({ email });
   if (!user) {
-    return next(new AppError("User not found", 404));
+    return next(new AppError("User not found", HttpStatus.NotFound));
   }
 
   const resetToken = user.createPasswordResetToken();
@@ -158,7 +177,7 @@ exports.forgetPassword = catchAsc(async (req, res, next) => {
   try {
     await new Email(user, resetURL).sendForgetPassword();
 
-    res.status(200).json({
+    res.status(HttpStatus.OK).json({
       status: "success",
       message: "Token sent to email!",
     });
@@ -180,7 +199,10 @@ exports.resetPassword = catchAsc(async (req, res, next) => {
   const { password, passwordConfirm } = req.body;
   if (!password || !passwordConfirm) {
     return next(
-      new AppError("Please provide password and passwordConfirm", 400)
+      new AppError(
+        "Please provide password and passwordConfirm",
+        HttpStatus.BadRequest
+      )
     );
   }
 
@@ -195,7 +217,9 @@ exports.resetPassword = catchAsc(async (req, res, next) => {
   });
 
   if (!user) {
-    return next(new AppError("Token is invalid or has expired", 400));
+    return next(
+      new AppError("Token is invalid or has expired", HttpStatus.BadRequest)
+    );
   }
 
   user.password = password;
@@ -205,5 +229,37 @@ exports.resetPassword = catchAsc(async (req, res, next) => {
 
   await user.save();
 
-  createSendToken(user, 200, res, "Password reset successfully");
+  createSendToken(user, HttpStatus.OK, res, "Password reset successfully");
+});
+
+exports.verifyEmail = catchAsc(async (req, res, next) => {
+  const { email, otp } = req.body;
+  if (!email || !otp) {
+    return next(
+      new AppError("Please provide email and otp", HttpStatus.BadRequest)
+    );
+  }
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    return next(new AppError("User not found", HttpStatus.NotFound));
+  }
+
+  if (user.emailOTPExpires < Date.now()) {
+    return next(new AppError("OTP expired", HttpStatus.BadRequest));
+  }
+
+  const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+
+  if (hashedOtp !== user.emailOTP) {
+    return next(new AppError("Invalid otp", HttpStatus.BadRequest));
+  }
+
+  user.isVerified = true;
+  user.emailOTP = undefined;
+  user.emailOTPExpires = undefined;
+
+  await user.save({ validateBeforeSave: false });
+
+  createSendToken(user, HttpStatus.OK, res, "Email verified successfully");
 });

@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const validator = require("validator");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
+const generateOTP = require("../utils/generateOtp");
 
 const userSchema = new mongoose.Schema({
   name: {
@@ -51,6 +52,12 @@ const userSchema = new mongoose.Schema({
     type: Date,
     select: false,
   },
+  isVerified: {
+    type: Boolean,
+    default: false,
+  },
+  emailOTP: String,
+  emailOTPExpires: Date,
 });
 
 // hash password before save user
