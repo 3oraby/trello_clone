@@ -98,6 +98,16 @@ exports.login = catchAsc(async (req, res, next) => {
     return next(new AppError("User is not active", HttpStatus.Unauthorized));
   }
 
+  if (!user.isVerified) {
+    // send verification email
+    await user.sendVerificationOTP(req);
+    return res.status(HttpStatus.OK).json({
+      status: "success",
+      message:
+        "Your email is not verified. Verification OTP sent to email, please verify your email first",
+    });
+  }
+
   createSendToken(user, HttpStatus.OK, res, "User logged in successfully");
 });
 
@@ -111,18 +121,11 @@ exports.signup = catchAsc(async (req, res, next) => {
     role: req.body.role,
   });
 
-  const otp = generateOTP();
-  const otpHashed = crypto.createHash("sha256").update(otp).digest("hex");
-  newUser.emailOTP = otpHashed;
-  newUser.emailOTPExpires = Date.now() + process.env.OTP_EXPIRES_IN * 60 * 1000;
-
-  await newUser.save({ validateBeforeSave: false });
-
-  new Email(newUser, req).sendVerificationOTP(otp);
+  await newUser.sendVerificationOTP(req);
 
   res.status(HttpStatus.Created).json({
     status: "success",
-    message: "otp sent to email! please go and verify your email",
+    message: "Verification OTP sent to email! please go and verify your email",
     data: newUser,
   });
 });

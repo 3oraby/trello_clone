@@ -12,16 +12,17 @@ module.exports = class Email {
 
   newTransport() {
     if (process.env.NODE_ENV === "production") {
-      return nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-        tls: {
-          rejectUnauthorized: false,
-        },
-      });
+      // TODO:  
+      // return nodemailer.createTransport({
+      //   service: "gmail",
+      //   auth: {
+      //     user: process.env.EMAIL_USER,
+      //     pass: process.env.EMAIL_PASS,
+      //   },
+      //   tls: {
+      //     rejectUnauthorized: false,
+      //   },
+      // });
     }
 
     return nodemailer.createTransport({
@@ -96,7 +97,7 @@ module.exports = class Email {
 
       await this.newTransport().sendMail(mailOptions);
     } catch (error) {
-      console.log(error);
+      console.log("error while send verification otp. e:" + error);
     }
   }
 };

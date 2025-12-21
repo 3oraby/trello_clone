@@ -3,62 +3,82 @@ const validator = require("validator");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const generateOTP = require("../utils/generateOtp");
+const Email = require("../utils/email");
 
-const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, "Name is required"],
-    trim: true,
-    maxlength: [40, "A user name must have less or equal then 40 characters"],
-    minlength: [2, "A user name must have more or equal then 2 characters"],
-  },
-  email: {
-    type: String,
-    required: [true, "Email is required"],
-    unique: true,
-    validate: [validator.isEmail, "Please provide a valid email"],
-  },
-  password: {
-    type: String,
-    select: false,
-    required: [true, "Password is required"],
-    // validate: [validator.isStrongPassword, "Please provide a strong password"],
-  },
-  passwordConfirm: {
-    type: String,
-    required: [true, "Password confirm is required"],
-    validate: {
-      validator: function (el) {
-        return el === this.password;
-      },
-      message: "Password confirm is not the same as password",
+const userSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, "Name is required"],
+      trim: true,
+      maxlength: [40, "A user name must have less or equal then 40 characters"],
+      minlength: [2, "A user name must have more or equal then 2 characters"],
     },
+    email: {
+      type: String,
+      required: [true, "Email is required"],
+      unique: true,
+      validate: [validator.isEmail, "Please provide a valid email"],
+    },
+    password: {
+      type: String,
+      select: false,
+      required: [true, "Password is required"],
+      // validate: [validator.isStrongPassword, "Please provide a strong password"],
+    },
+    passwordConfirm: {
+      type: String,
+      required: [true, "Password confirm is required"],
+      validate: {
+        validator: function (el) {
+          return el === this.password;
+        },
+        message: "Password confirm is not the same as password",
+      },
+    },
+    role: {
+      type: String,
+      enum: {
+        values: ["user", "admin"],
+        message: "Role must be user or admin",
+      },
+      default: "user",
+    },
+    active: {
+      type: Boolean,
+      default: true,
+    },
+    photo: {
+      type: String,
+    },
+    passwordResetToken: String,
+    passwordResetExpires: Date,
+    passwordChangedAt: {
+      type: Date,
+      select: false,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailOTP: String,
+    emailOTPExpires: Date,
   },
-  role: {
-    type: String,
-    enum: { values: ["user", "admin"], message: "Role must be user or admin" },
-    default: "user",
-  },
-  active: {
-    type: Boolean,
-    default: true,
-  },
-  photo: {
-    type: String,
-  },
-  passwordResetToken: String,
-  passwordResetExpires: Date,
-  passwordChangedAt: {
-    type: Date,
-    select: false,
-  },
-  isVerified: {
-    type: Boolean,
-    default: false,
-  },
-  emailOTP: String,
-  emailOTPExpires: Date,
-});
+  {
+    toJSON: {
+      transform: function (doc, ret) {
+        return {
+          id: ret._id,
+          name: ret.name,
+          email: ret.email,
+          role: ret.role,
+          isVerified: ret.isVerified,
+          photo: ret.photo,
+        };
+      },
+    },
+  }
+);
 
 // hash password before save user
 userSchema.pre("save", async function () {
@@ -114,6 +134,15 @@ userSchema.methods.changedPasswordAfter = function (JWTTimestamp) {
     return JWTTimestamp < changedTimestamp;
   }
   return false;
+};
+
+userSchema.methods.sendVerificationOTP = async function (req) {
+  const otp = generateOTP();
+  const otpHashed = crypto.createHash("sha256").update(otp).digest("hex");
+  this.emailOTP = otpHashed;
+  this.emailOTPExpires = Date.now() + process.env.OTP_EXPIRES_IN * 60 * 1000;
+  await this.save({ validateBeforeSave: false });
+  new Email(this, req).sendVerificationOTP(otp);
 };
 
 module.exports = mongoose.model("User", userSchema);
