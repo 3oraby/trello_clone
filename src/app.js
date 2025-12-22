@@ -5,6 +5,7 @@ const globalErrorHandler = require("./controllers/errorController");
 
 const userRoutes = require("./routes/userRoutes.js");
 const authRoutes = require("./routes/authRoutes.js");
+const boardsRoutes = require("./routes/boardsRoutes.js");
 const path = require("path");
 
 app.set("view engine", "pug");
@@ -25,6 +26,7 @@ app.get("/resetPassword/:token", (req, res) => {
 
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/auths", authRoutes);
+app.use("/api/v1/boards", boardsRoutes);
 
 app.use((req, res, next) => {
   next(new AppError(`Can not find ${req.originalUrl} on this server!`, 404));

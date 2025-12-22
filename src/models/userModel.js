@@ -64,6 +64,7 @@ const userSchema = new mongoose.Schema(
     emailOTP: String,
     emailOTPExpires: Date,
   },
+  { timestamps: true },
   {
     toJSON: {
       transform: function (doc, ret) {

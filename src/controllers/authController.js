@@ -2,6 +2,7 @@ const handlerFactory = require("../controllers/handlerFactory");
 const catchAsc = require("../utils/catchAsc");
 const jwt = require("jsonwebtoken");
 const AppError = require("../utils/appError");
+const { promisify } = require("util");
 
 const User = require("../models/userModel");
 const Email = require("../utils/email");
@@ -52,11 +53,10 @@ exports.protect = catchAsc(async (req, res, next) => {
     );
   }
 
-  const decoded = await jwt.verify(token, process.env.JWT_SECRET);
+  const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
 
   const user = await User.findById(decoded.id);
 
-  console.log(user);
   if (!user) {
     return next(
       new AppError(
@@ -78,6 +78,17 @@ exports.protect = catchAsc(async (req, res, next) => {
   req.user = user;
   next();
 });
+
+exports.restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return next(
+        new AppError("You do not have permission to perform this action", 403)
+      );
+    }
+    next();
+  };
+};
 
 exports.login = catchAsc(async (req, res, next) => {
   const { email, password } = req.body;
