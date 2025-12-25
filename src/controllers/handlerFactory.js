@@ -1,38 +1,53 @@
 const catchAsync = require("../utils/catchAsc");
 const AppError = require("../utils/appError");
 
+const getModelKey = (Model, plural = false) => {
+  const name = Model.modelName.toLowerCase();
+  return plural ? `${name}s` : name;
+};
+
 exports.createOne = (Model) =>
   catchAsync(async (req, res, next) => {
     const doc = await Model.create(req.body);
+    const key = getModelKey(Model);
+
     res.status(201).json({
       status: "success",
-      data: { doc },
+      [key]: doc,
     });
   });
 
 exports.getAll = (Model) =>
-  catchAsync(async (req, res) => {
+  catchAsync(async (req, res, next) => {
     const docs = await Model.find();
+    const key = getModelKey(Model, true);
 
     res.status(200).json({
       status: "success",
-      requestTime: req.requestTime,
       results: docs.length,
-      data: docs,
+      [key]: docs,
     });
   });
 
 exports.getOne = (Model, populateOptions) =>
   catchAsync(async (req, res, next) => {
-    const doc = await Model.findById(req.params.id);
+    let query = Model.findById(req.params.id);
+
+    if (populateOptions) {
+      query = query.populate(populateOptions);
+    }
+
+    const doc = await query;
 
     if (!doc) {
       return next(new AppError("No document found with that ID", 404));
     }
 
+    const key = getModelKey(Model);
+
     res.status(200).json({
       status: "success",
-      data: { data: doc },
+      [key]: doc,
     });
   });
 
@@ -47,9 +62,11 @@ exports.updateOne = (Model) =>
       return next(new AppError("No document found with that ID", 404));
     }
 
+    const key = getModelKey(Model);
+
     res.status(200).json({
       status: "success",
-      data: { data: doc },
+      [key]: doc,
     });
   });
 

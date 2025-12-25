@@ -7,12 +7,13 @@ const {
   getBoard,
   updateBoard,
   deleteBoard,
+  setBoardUserIds,
 } = require("../controllers/boardsController");
 
 const { protect, restrictTo } = require("../controllers/authController");
 
 router.use(protect);
-router.route("/").get(getAllBoards).post(createBoard);
+router.route("/").get(getAllBoards).post(setBoardUserIds, createBoard);
 router
   .route("/:id")
   .get(getBoard)
