@@ -15,7 +15,6 @@ const BoardSchema = new mongoose.Schema(
     description: {
       type: String,
       trim: true,
-      nullable: true,
       maxlength: [
         200,
         "A board description must have less or equal then 200 characters",
@@ -34,13 +33,13 @@ const BoardSchema = new mongoose.Schema(
     timestamps: true,
     toJSON: {
       transform(doc, ret) {
-        ret.id = ret._id;
-        delete ret._id;
         delete ret.__v;
         return ret;
       },
     },
   }
 );
+
+BoardSchema.index({ title: 1, ownerId: 1 }, { unique: true });
 
 module.exports = mongoose.model("Board", BoardSchema);
