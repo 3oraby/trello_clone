@@ -5,9 +5,9 @@ const boardsController = require("../controllers/boardsController");
 
 const { protect, restrictTo } = require("../controllers/authController");
 
-router.get("/getAll", boardsController.getAllBoards);
-
 router.use(protect);
+router.get("/getAll", restrictTo("admin"), boardsController.getAllBoards);
+
 router
   .route("/")
   .get(boardsController.filterByUser, boardsController.getMyBoards)

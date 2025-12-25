@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const boardRoles = require("../enums/boardRoles");
 
 const boardMemberSchema = new mongoose.Schema(
   {
@@ -15,14 +16,10 @@ const boardMemberSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: {
-        values: ["admin", "member"],
-        message: "Role must be admin or member",
+        values: [boardRoles.OWNER, boardRoles.ADMIN, boardRoles.MEMBER],
+        message: `Role must be ${boardRoles.OWNER} or ${boardRoles.ADMIN} or ${boardRoles.MEMBER}`,
       },
-      default: "member",
-    },
-    joinedAt: {
-      type: Date,
-      default: Date.now,
+      default: boardRoles.MEMBER,
     },
     invitedBy: {
       type: mongoose.Schema.Types.ObjectId,

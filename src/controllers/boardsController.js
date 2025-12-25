@@ -1,8 +1,11 @@
 const handlerFactory = require("./handlerFactory");
 const Board = require("../models/boardModel");
+const BoardMember = require("../models/boardMemberModel");
+const AppError = require("../utils/appError");
+const boardRoles = require("../enums/boardRoles");
+const catchAsync = require("../utils/catchAsc");
 
 exports.getAllBoards = handlerFactory.getAll(Board);
-exports.createBoard = handlerFactory.createOne(Board);
 exports.getBoard = handlerFactory.getOne(Board);
 exports.updateBoard = handlerFactory.updateOne(Board);
 exports.deleteBoard = handlerFactory.deleteOne(Board);
@@ -17,3 +20,28 @@ exports.filterByUser = (req, res, next) => {
   req.filter = { ownerId: req.user.id };
   next();
 };
+
+exports.createBoard = catchAsync(async (req, res, next) => {
+  if (!req.body.ownerId) req.body.ownerId = req.user.id;
+
+  const board = await Board.create(req.body);
+
+  await BoardMember.create({
+    boardId: board._id,
+    userId: req.user.id,
+    role: boardRoles.OWNER,
+  });
+
+  res.status(201).json({
+    status: "success",
+    board,
+  });
+});
+
+
+// assign user id to board
+// archive board
+// unarchive board
+// get archived boards
+// remove user from board
+// convert viewer to admin
